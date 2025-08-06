@@ -1,0 +1,60 @@
+name: Build Doris Installation Package
+
+# 触发条件：手动触发或推送到特定分支时
+on:
+  workflow_dispatch:  # 支持手动在 GitHub 界面触发
+    inputs:
+      doris_version:
+        description: 'Doris version tag (e.g., v2.1.6)'
+        required: true
+        default: 'v2.1.6'
+  push:
+    branches: [ "branch-2.1" ]  # 推送到 branch-2.1 时自动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04  # 使用 Ubuntu 环境构建（兼容 Doris 编译）
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.doris_version }}  # 切换到指定版本标签
+
+      - name: Install dependencies
+        run: |
+          # 安装 Java 8、Maven、Git、编译工具等
+          sudo apt-get update
+          sudo apt-get install -y openjdk-8-jdk maven git gcc g++ make automake autoconf libtool
+
+      - name: Configure environment
+        run: |
+          # 设置 JAVA_HOME 和 Maven 镜像（加速依赖下载）
+          echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+          # 配置 Maven 国内镜像（阿里云）
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml << EOF
+          <settings>
+            <mirrors>
+              <mirror>
+               <id>alimaven</id>
+              <name>aliyun maven</name>
+              <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
+              <mirrorOf>central</mirrorOf>
+              </mirror>
+            </mirrors>
+          </settings>
+          EOF
+
+      - name: Build Doris
+        run: |
+          # 编译打包（跳过测试，加速构建）
+          mvn -B clean package -DskipTests -Pbinary
+          # 查看打包结果
+          ls -lh dist/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: doris-package
+          path: dist/*.tar.gz  # 上传 dist 目录下的安装包
